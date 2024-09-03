@@ -121,6 +121,7 @@ int main()
     {
         std::cout << "QQ未安装,开始下载QQ..." << std::endl;
         ShellExecute(NULL, "open", QQDonwload.c_str(), NULL, NULL, SW_SHOWNORMAL);
+        system("pause");
         return -1;
     }
     int tempBuildId = getQQVersionByConfig(QQPath);
@@ -131,6 +132,7 @@ int main()
     if (tempBuildId == 0)
     {
         std::cout << "获取QQ版本失败" << std::endl;
+        system("pause");
         return -1;
     }
     std::cout << "QQ版本:" << tempBuildId << std::endl;
@@ -142,12 +144,14 @@ int main()
     {
         std::cout << "QQ版本错误,开始下载QQ..." << std::endl;
         ShellExecute(NULL, "open", QQDonwload.c_str(), NULL, NULL, SW_SHOWNORMAL);
+        system("pause");
         return -1;
     }
     std::string NcVersion = getNapCatVersion();
     if (NcVersion == "")
     {
         std::cout << "获取NapCat最新版本失败" << std::endl;
+        system("pause");
         return -1;
     }
     std::cout << "NapCat最新版本:" << NcVersion << std::endl;
@@ -160,6 +164,7 @@ int main()
         if (res->status != 200)
         {
             std::cout << "下载NapCat失败" << res->status << std::endl;
+            system("pause");
             return -1;
         }
         std::ofstream out("NapCat.Shell.zip", std::ios::binary);
@@ -169,6 +174,7 @@ int main()
     else
     {
         std::cout << "下载NapCat失败" << std::endl;
+        system("pause");
         return -1;
     }
     // 调用powershell的 Expand-Archive -Path "./NapCat.Shell.zip" -DestinationPath "./NapCatQQ/" -Force 解压
