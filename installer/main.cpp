@@ -175,14 +175,23 @@ int main()
     system("powershell Expand-Archive -Path \"./NapCat.Shell.zip\" -DestinationPath \"./NapCatQQ/\" -Force");
     // 移动./NapCatQQ/dbghelp.dll 到QQPath
     std::string dbghelpPath = QQPath + "\\dbghelp.dll";
-    std::string dbghelpNapCatPath = "./NapCatQQ/dbghelp.dll";
+    // 获取当前目录
+    char currentPath[1024];
+    GetCurrentDirectory(1024, currentPath);
+    std::string dbghelpNapCatPath = currentPath;
+    dbghelpNapCatPath += "\\NapCatQQ\\dbghelp.dll";
+    std::cout << "Target: dbghelp.dll:" << dbghelpPath << std::endl;
+    std::cout << "Source: dbghelp.dll:" << dbghelpNapCatPath << std::endl;
     // 判断是否被占用
     system("taskkill /f /im QQ.exe");
-    if (rename(dbghelpNapCatPath.c_str(), dbghelpPath.c_str()) != 0)
+    // 判断原来的dbghelp.dll是否存在
+    if (std::ifstream(dbghelpPath))
     {
-        std::cout << "移动dbghelp.dll失败" << std::endl;
-        return -1;
+        // 删除原来的dbghelp.dll
+        std::remove(dbghelpPath.c_str());
     }
+    // 移动dbghelp.dll
+    std::rename(dbghelpNapCatPath.c_str(), dbghelpPath.c_str());
     // 弹出提示框是否启动NapCat
     int ret = MessageBox(NULL, TEXT("是否启动NapCat?"), TEXT("NapCat"), MB_YESNO);
     // 启动powershell 设置Set-ExecutionPolicy Unrestricted
