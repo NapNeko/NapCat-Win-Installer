@@ -136,7 +136,7 @@ int main()
         return -1;
     }
     std::cout << "QQ版本:" << tempBuildId << std::endl;
-    if (tempBuildId <= targetQQVersion)
+    if (tempBuildId >= targetQQVersion)
     {
         std::cout << "QQ版本正确" << std::endl;
     }
