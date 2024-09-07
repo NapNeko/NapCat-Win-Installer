@@ -1,10 +1,103 @@
+#include "./meojson/json.hpp"
+
 #include <iostream>
+#include <windows.h>
 #include <string>
 #include <tuple>
-#include "./meojson/json.hpp"
-#include "./httplib.h"
+#include <string>
+#include <vector>
+#include <wininet.h>
+#include <fstream>
+#include <string>
+
+#pragma comment(lib, "wininet.lib")
 
 std::string QQDonwload = "https://dldir1.qq.com/qqfile/qq/QQNT/b07cb1a5/QQ9.9.15.27597_x64.exe";
+bool HttpGet(const std::string &url, std::string &response)
+{
+    HINTERNET hInternet = InternetOpen("HTTPGET", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
+    if (!hInternet)
+    {
+        std::cerr << "InternetOpen failed" << std::endl;
+        return false;
+    }
+
+    HINTERNET hConnect = InternetOpenUrl(hInternet, std::string(url.begin(), url.end()).c_str(), NULL, 0, INTERNET_FLAG_RELOAD, 0);
+    if (!hConnect)
+    {
+        std::cerr << "InternetOpenUrl failed" << std::endl;
+        InternetCloseHandle(hInternet);
+        return false;
+    }
+
+    char buffer[4096];
+    DWORD bytesRead;
+    while (InternetReadFile(hConnect, buffer, sizeof(buffer), &bytesRead) && bytesRead != 0)
+    {
+        response.append(buffer, bytesRead);
+    }
+
+    InternetCloseHandle(hConnect);
+    InternetCloseHandle(hInternet);
+    return true;
+}
+
+bool DownloadFile(const std::string &url, const std::string &filePath)
+{
+    std::string response;
+    if (!HttpGet(url, response))
+    {
+        return false;
+    }
+
+    std::ofstream outFile(filePath, std::ios::binary);
+    if (!outFile)
+    {
+        std::cerr << "Failed to open file for writing" << std::endl;
+        return false;
+    }
+
+    outFile.write(response.c_str(), response.size());
+    outFile.close();
+    return true;
+}
+
+std::string getNapCatVersionByPackageMirror()
+{
+    std::vector<std::string> napcatVersionPath = {
+        "http://jsd.cdn.zzko.cn/gh/NapNeko/NapCatQQ@main/package.json",
+        "http://fastly.jsdelivr.net/gh/NapNeko/NapCatQQ@main/package.json",
+        "https://gcore.jsdelivr.net/gh/NapNeko/NapCatQQ@main/package.json",
+        "https://cdn.jsdelivr.net/gh/NapNeko/NapCatQQ@main/package.json"};
+
+    for (const auto &url : napcatVersionPath)
+    {
+        std::string response = "";
+        if (HttpGet(url, response))
+        {
+            // 处理响应数据
+            // std::cout << "Response from " << url << ": " << response << std::endl;
+            return response;
+        }
+    }
+
+    return "";
+}
+std::string getNapCatVersionByPackage()
+{
+    std::string res = getNapCatVersionByPackageMirror();
+    if (res.empty())
+    {
+        return "";
+    }
+    auto ret = json::parse(res);
+    if (!ret)
+    {
+        return "";
+    }
+    json::value &value = *ret;
+    return (std::string)value["version"];
+}
 
 std::tuple<bool, std::string> getQQInstalled()
 {
@@ -31,18 +124,14 @@ std::tuple<bool, std::string> getQQInstalled()
 }
 std::string getNapCatVersion()
 {
+    std::string response = "";
     // 开始请求HTTP http://nclatest.znin.net/ 解析Json
-    httplib::Client nclatestHost("http://nclatest.znin.net");
-    if (auto res = nclatestHost.Get("/"))
+    if (HttpGet("http://nclatest.znin.net/", response))
     {
         // std::cout << res->status << std::endl;
         // std::cout << res->get_header_value("Content-Type") << std::endl;
         // std::cout << res->body << std::endl;
-        if (res->status != 200)
-        {
-            return "";
-        }
-        auto ret = json::parse(res->body);
+        auto ret = json::parse(response);
         if (!ret)
         {
             return "";
@@ -150,6 +239,11 @@ int main()
     std::string NcVersion = getNapCatVersion();
     if (NcVersion == "")
     {
+        std::cout << "获取NapCat最新版本失败,尝试备用地址" << std::endl;
+        NcVersion = "v" + getNapCatVersionByPackage();
+    }
+    if (NcVersion == "")
+    {
         std::cout << "获取NapCat最新版本失败" << std::endl;
         system("pause");
         return -1;
@@ -157,21 +251,9 @@ int main()
     std::cout << "NapCat最新版本:" << NcVersion << std::endl;
     std::string napcatDownloadUrl = "/https://github.com/NapNeko/NapCatQQ/releases/download/" + NcVersion + "/NapCat.Shell.zip";
     // 下载文件
-    httplib::Client downloadHost("http://github.moeyy.xyz");
+    auto isDownloaded = DownloadFile("http://github.moeyy.xyz" + napcatDownloadUrl, "NapCat.Shell.zip");
     std::cout << "下载地址: " << "http://github.moeyy.xyz" << napcatDownloadUrl << std::endl;
-    if (auto res = downloadHost.Get(napcatDownloadUrl.c_str()))
-    {
-        if (res->status != 200)
-        {
-            std::cout << "下载NapCat失败" << res->status << std::endl;
-            system("pause");
-            return -1;
-        }
-        std::ofstream out("NapCat.Shell.zip", std::ios::binary);
-        out.write(res->body.c_str(), res->body.size());
-        out.close();
-    }
-    else
+    if (!isDownloaded)
     {
         std::cout << "下载NapCat失败" << std::endl;
         system("pause");
@@ -179,35 +261,32 @@ int main()
     }
     // 调用powershell的 Expand-Archive -Path "./NapCat.Shell.zip" -DestinationPath "./NapCatQQ/" -Force 解压
     system("powershell Expand-Archive -Path \"./NapCat.Shell.zip\" -DestinationPath \"./NapCatQQ/\" -Force");
+    system("cls");
     // 移动./NapCatQQ/dbghelp.dll 到QQPath
-    std::string dbghelpPath = QQPath + "\\dbghelp.dll";
-    // 获取当前目录
-    char currentPath[1024];
-    GetCurrentDirectory(1024, currentPath);
-    std::string dbghelpNapCatPath = currentPath;
-    dbghelpNapCatPath += "\\NapCatQQ\\dbghelp.dll";
-    std::cout << "Target: dbghelp.dll:" << dbghelpPath << std::endl;
-    std::cout << "Source: dbghelp.dll:" << dbghelpNapCatPath << std::endl;
-    // 判断是否被占用
-    system("taskkill /f /im QQ.exe");
-    // 判断原来的dbghelp.dll是否存在
-    if (std::ifstream(dbghelpPath))
-    {
-        // 删除原来的dbghelp.dll
-        std::remove(dbghelpPath.c_str());
-    }
-    // 移动dbghelp.dll
-    std::rename(dbghelpNapCatPath.c_str(), dbghelpPath.c_str());
+    // std::string dbghelpPath = QQPath + "\\dbghelp.dll";
+    // // 获取当前目录
+    // char currentPath[1024];
+    // GetCurrentDirectory(1024, currentPath);
+    // std::string dbghelpNapCatPath = currentPath;
+    // dbghelpNapCatPath += "\\NapCatQQ\\dbghelp.dll";
+    // std::cout << "Target: dbghelp.dll:" << dbghelpPath << std::endl;
+    // std::cout << "Source: dbghelp.dll:" << dbghelpNapCatPath << std::endl;
+    // // 判断是否被占用
+    // system("taskkill /f /im QQ.exe");
+    // // 判断原来的dbghelp.dll是否存在
+    // if (std::ifstream(dbghelpPath))
+    // {
+    //     // 删除原来的dbghelp.dll
+    //     std::remove(dbghelpPath.c_str());
+    // }
+    // // 移动dbghelp.dll
+    // std::rename(dbghelpNapCatPath.c_str(), dbghelpPath.c_str());
     // 弹出提示框是否启动NapCat
-    int ret = MessageBox(NULL, TEXT("是否启动NapCat?"), TEXT("NapCat"), MB_YESNO);
+    // int ret = MessageBox(NULL, TEXT("是否启动NapCat?"), TEXT("NapCat"), MB_YESNO);
     // 启动powershell 设置Set-ExecutionPolicy Unrestricted
-    system("powershell Set-ExecutionPolicy Unrestricted");
-    if (ret == IDYES)
-    {
-        // 新建分离进程启动 BootWay05.ps1
-        system("start powershell -noexit -file ./NapCatQQ/BootWay05.ps1");
-    }
-    std::cout << "欢迎使用哦~~ 下次启动在启动本程序NapCatQQ目录下 BootWay05.ps1即可" << std::endl;
+    // system("powershell Set-ExecutionPolicy Unrestricted");
+    // 获取当前目录
+    std::cout << "欢迎使用哦~~ 双击启动在启动本程序NapCatQQ目录下 launcher.bat 或者 launcher-win10.bat 即可" << std::endl;
     system("pause");
     return 0;
 }
