@@ -1,18 +1,32 @@
-#include "./meojson/json.hpp"
-
 #include <iostream>
 #include <windows.h>
 #include <string>
 #include <tuple>
-#include <string>
 #include <vector>
 #include <wininet.h>
 #include <fstream>
-#include <string>
 
 #pragma comment(lib, "wininet.lib")
 
 std::string QQDonwload = "https://dldir1.qq.com/qqfile/qq/QQNT/b07cb1a5/QQ9.9.15.27597_x64.exe";
+
+std::string getMidText(std::string str, std::string str1, std::string str2)
+{
+    std::string returnStr;
+    int strIndex = str.find(str1);
+    if (strIndex != -1)
+    {
+        strIndex = strIndex + str1.length();
+        int endIndex = str.find(str2, strIndex);
+        if (endIndex != -1)
+        {
+            returnStr = str.substr(strIndex, endIndex - strIndex);
+            return returnStr;
+        }
+    }
+    return returnStr;
+}
+
 bool HttpGet(const std::string &url, std::string &response)
 {
     HINTERNET hInternet = InternetOpen("HTTPGET", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
@@ -83,6 +97,7 @@ std::string getNapCatVersionByPackageMirror()
 
     return "";
 }
+
 std::string getNapCatVersionByPackage()
 {
     std::string res = getNapCatVersionByPackageMirror();
@@ -90,13 +105,7 @@ std::string getNapCatVersionByPackage()
     {
         return "";
     }
-    auto ret = json::parse(res);
-    if (!ret)
-    {
-        return "";
-    }
-    json::value &value = *ret;
-    return (std::string)value["version"];
+    return getMidText(res, "\"version\": \"", "\"");
 }
 
 std::tuple<bool, std::string> getQQInstalled()
@@ -122,26 +131,20 @@ std::tuple<bool, std::string> getQQInstalled()
     QQPath = QQPath.substr(0, QQPath.find_last_of("\\")); // 截取路径
     return std::make_tuple(true, QQPath);
 }
+
 std::string getNapCatVersion()
 {
     std::string response = "";
     // 开始请求HTTP http://nclatest.znin.net/ 解析Json
     if (HttpGet("http://nclatest.znin.net/", response))
     {
-        // std::cout << res->status << std::endl;
-        // std::cout << res->get_header_value("Content-Type") << std::endl;
-        // std::cout << res->body << std::endl;
-        auto ret = json::parse(response);
-        if (!ret)
-        {
-            return "";
-        }
-        json::value &value = *ret;
-        // std::cout << (std::string)value["tag_name"] << std::endl;
-        return (std::string)value["tag_name"];
+        // "html_url": "https://github.com/NapNeko/NapCatQQ/releases/tag/v2.3.5",
+        //获取v2.3.5这种值
+        return getMidText(response,"https://github.com/NapNeko/NapCatQQ/releases/tag/", "\"");
     }
     return "";
 }
+
 int getQQVersionByPackage(std::string QQPath)
 {
     // 组装目录 .\resources\app\package.json
@@ -159,15 +162,9 @@ int getQQVersionByPackage(std::string QQPath)
         packageData += line;
     }
     QQVersionFile.close();
-    // 解析Json
-    auto ret = json::parse(packageData);
-    if (!ret)
-    {
-        return 0;
-    }
-    json::value &value = *ret;
-    return std::stoi((std::string)value["buildVersion"]);
+    return std::stoi(getMidText(packageData, "\"buildVersion\":", ","));
 }
+
 int getQQVersionByConfig(std::string QQPath)
 {
     // 组装目录 .\config\config.json
@@ -185,15 +182,9 @@ int getQQVersionByConfig(std::string QQPath)
         packageData += line;
     }
     QQVersionFile.close();
-    // 解析Json
-    auto ret = json::parse(packageData);
-    if (!ret)
-    {
-        return 0;
-    }
-    json::value &value = *ret;
-    return std::stoi((std::string)value["buildId"]);
+    return std::stoi(getMidText(packageData, "\"buildId\": \"", "\""));
 }
+
 int main()
 {
     bool isQQInstalled;
@@ -262,30 +253,6 @@ int main()
     // 调用powershell的 Expand-Archive -Path "./NapCat.Shell.zip" -DestinationPath "./NapCatQQ/" -Force 解压
     system("powershell Expand-Archive -Path \"./NapCat.Shell.zip\" -DestinationPath \"./NapCatQQ/\" -Force");
     system("cls");
-    // 移动./NapCatQQ/dbghelp.dll 到QQPath
-    // std::string dbghelpPath = QQPath + "\\dbghelp.dll";
-    // // 获取当前目录
-    // char currentPath[1024];
-    // GetCurrentDirectory(1024, currentPath);
-    // std::string dbghelpNapCatPath = currentPath;
-    // dbghelpNapCatPath += "\\NapCatQQ\\dbghelp.dll";
-    // std::cout << "Target: dbghelp.dll:" << dbghelpPath << std::endl;
-    // std::cout << "Source: dbghelp.dll:" << dbghelpNapCatPath << std::endl;
-    // // 判断是否被占用
-    // system("taskkill /f /im QQ.exe");
-    // // 判断原来的dbghelp.dll是否存在
-    // if (std::ifstream(dbghelpPath))
-    // {
-    //     // 删除原来的dbghelp.dll
-    //     std::remove(dbghelpPath.c_str());
-    // }
-    // // 移动dbghelp.dll
-    // std::rename(dbghelpNapCatPath.c_str(), dbghelpPath.c_str());
-    // 弹出提示框是否启动NapCat
-    // int ret = MessageBox(NULL, TEXT("是否启动NapCat?"), TEXT("NapCat"), MB_YESNO);
-    // 启动powershell 设置Set-ExecutionPolicy Unrestricted
-    // system("powershell Set-ExecutionPolicy Unrestricted");
-    // 获取当前目录
     std::cout << "欢迎使用哦~~ 双击启动在启动本程序NapCatQQ目录下 launcher.bat 或者 launcher-win10.bat 即可" << std::endl;
     system("pause");
     return 0;
