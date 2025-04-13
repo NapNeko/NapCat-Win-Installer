@@ -8,7 +8,7 @@
 
 #pragma comment(lib, "wininet.lib")
 
-std::string QQDonwload = "https://dldir1.qq.com/qqfile/qq/QQNT/b07cb1a5/QQ9.9.15.27597_x64.exe";
+std::string QQDonwload = "https://dldir1.qq.com/qqfile/qq/QQNT/882aec99/QQ9.9.19.34231_x64.exe";
 
 std::string getMidText(std::string str, std::string str1, std::string str2)
 {
@@ -79,7 +79,6 @@ bool DownloadFile(const std::string &url, const std::string &filePath)
 std::string getNapCatVersionByPackageMirror()
 {
     std::vector<std::string> napcatVersionPath = {
-        "http://jsd.cdn.zzko.cn/gh/NapNeko/NapCatQQ@main/package.json",
         "http://fastly.jsdelivr.net/gh/NapNeko/NapCatQQ@main/package.json",
         "https://gcore.jsdelivr.net/gh/NapNeko/NapCatQQ@main/package.json",
         "https://cdn.jsdelivr.net/gh/NapNeko/NapCatQQ@main/package.json"};
@@ -168,7 +167,7 @@ int getQQVersionByPackage(std::string QQPath)
 int getQQVersionByConfig(std::string QQPath)
 {
     // 组装目录 .\config\config.json
-    std::string QQVersionPath = QQPath + "\\resources\\app\\versions\\config.json";
+    std::string QQVersionPath = QQPath + "\\versions\\config.json";
     // 判断文件是否存在
     std::ifstream QQVersionFile(QQVersionPath);
     if (!QQVersionFile)
@@ -190,7 +189,7 @@ int main()
     bool isQQInstalled;
     std::string QQPath;
     std::tie(isQQInstalled, QQPath) = getQQInstalled();
-    int targetQQVersion = 27597;
+    int targetQQVersion = 34231;
     system("chcp 65001");
     std::cout << "检测QQ是否安装" << std::endl;
     if (isQQInstalled)
