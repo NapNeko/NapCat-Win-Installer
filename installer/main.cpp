@@ -5,254 +5,671 @@
 #include <vector>
 #include <wininet.h>
 #include <fstream>
+#include <filesystem>
 
 #pragma comment(lib, "wininet.lib")
 
-std::string QQDonwload = "https://dldir1.qq.com/qqfile/qq/QQNT/882aec99/QQ9.9.19.34231_x64.exe";
+// 控制台文本颜色常量
+constexpr int COLOR_INFO = 11;    // 浅青色
+constexpr int COLOR_SUCCESS = 10; // 亮绿色
+constexpr int COLOR_ERROR = 12;   // 亮红色
+constexpr int COLOR_WARNING = 14; // 黄色
+constexpr int COLOR_NORMAL = 7;   // 白色
 
-std::string getMidText(std::string str, std::string str1, std::string str2)
+const std::wstring QQ_DOWNLOAD_URL = L"https://dldir1.qq.com/qqfile/qq/QQNT/5b923c72/QQ9.9.19.34362_x64.exe";
+const std::wstring QQ_EXE_PATH = L"QQ.exe";
+const std::wstring QQ_EXTRACT_DIR = L"NapCat.34362.Shell";
+const std::wstring NAPCAT_ZIP_PATH = L"NapCat.Shell.zip";
+const std::wstring NAPCAT_EXTRACT_DIR = L"NapCat.34362.Shell\\versions\\9.9.19-34362\\resources\\app\\napcat";
+const std::wstring PACKAGE_JSON_PATH = L"NapCat.34362.Shell\\versions\\9.9.19-34362\\resources\\app\\package.json";
+
+// 编码转换函数：将 UTF-16 (wstring) 转换为 ANSI (string)
+std::string WideToAnsi(const std::wstring &wstr)
 {
-    std::string returnStr;
-    int strIndex = str.find(str1);
-    if (strIndex != -1)
-    {
-        strIndex = strIndex + str1.length();
-        int endIndex = str.find(str2, strIndex);
-        if (endIndex != -1)
-        {
-            returnStr = str.substr(strIndex, endIndex - strIndex);
-            return returnStr;
-        }
-    }
-    return returnStr;
+    if (wstr.empty())
+        return std::string();
+
+    int size_needed = WideCharToMultiByte(CP_ACP, 0, wstr.c_str(), (int)wstr.size(), NULL, 0, NULL, NULL);
+    std::string strTo(size_needed, 0);
+    WideCharToMultiByte(CP_ACP, 0, wstr.c_str(), (int)wstr.size(), &strTo[0], size_needed, NULL, NULL);
+
+    return strTo;
 }
 
-bool HttpGet(const std::string &url, std::string &response)
+// 编码转换函数：将 ANSI (string) 转换为 UTF-16 (wstring)
+std::wstring AnsiToWide(const std::string &str)
 {
-    HINTERNET hInternet = InternetOpen("HTTPGET", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
-    if (!hInternet)
+    if (str.empty())
+        return std::wstring();
+
+    int size_needed = MultiByteToWideChar(CP_ACP, 0, str.c_str(), (int)str.size(), NULL, 0);
+    std::wstring wstrTo(size_needed, 0);
+    MultiByteToWideChar(CP_ACP, 0, str.c_str(), (int)str.size(), &wstrTo[0], size_needed);
+
+    return wstrTo;
+}
+
+// 编码转换函数：将 UTF-16 (wstring) 转换为 UTF-8 (string)
+std::string WideToUtf8(const std::wstring &wstr)
+{
+    if (wstr.empty())
+        return std::string();
+
+    int size_needed = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), (int)wstr.size(), NULL, 0, NULL, NULL);
+    std::string strTo(size_needed, 0);
+    WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), (int)wstr.size(), &strTo[0], size_needed, NULL, NULL);
+
+    return strTo;
+}
+
+// 编码转换函数：将 UTF-8 (string) 转换为 UTF-16 (wstring)
+std::wstring Utf8ToWide(const std::string &str)
+{
+    if (str.empty())
+        return std::wstring();
+
+    int size_needed = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), NULL, 0);
+    std::wstring wstrTo(size_needed, 0);
+    MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), &wstrTo[0], size_needed);
+
+    return wstrTo;
+}
+
+// 设置控制台文字颜色
+void setConsoleColor(int color)
+{
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    SetConsoleTextAttribute(hConsole, color);
+}
+
+// 打印带颜色的信息
+void printInfo(const std::wstring &message)
+{
+    setConsoleColor(COLOR_INFO);
+    std::wcout << L"[信息] " << message << std::endl;
+    setConsoleColor(COLOR_NORMAL);
+}
+
+void printSuccess(const std::wstring &message)
+{
+    setConsoleColor(COLOR_SUCCESS);
+    std::wcout << L"[成功] " << message << std::endl;
+    setConsoleColor(COLOR_NORMAL);
+}
+
+void printError(const std::wstring &message)
+{
+    setConsoleColor(COLOR_ERROR);
+    std::wcout << L"[错误] " << message << std::endl;
+    setConsoleColor(COLOR_NORMAL);
+}
+
+void printWarning(const std::wstring &message)
+{
+    setConsoleColor(COLOR_WARNING);
+    std::wcout << L"[警告] " << message << std::endl;
+    setConsoleColor(COLOR_NORMAL);
+}
+
+bool modifyPackageJson()
+{
+    printInfo(L"准备修改package.json文件...");
+
+    // 检查文件是否存在
+    if (!std::filesystem::exists(PACKAGE_JSON_PATH))
     {
-        std::cerr << "InternetOpen failed" << std::endl;
+        printError(L"找不到package.json文件: " + PACKAGE_JSON_PATH);
         return false;
     }
 
-    HINTERNET hConnect = InternetOpenUrl(hInternet, std::string(url.begin(), url.end()).c_str(), NULL, 0, INTERNET_FLAG_RELOAD, 0);
+    // 读取文件内容
+    std::ifstream inFile(PACKAGE_JSON_PATH);
+    if (!inFile)
+    {
+        printError(L"无法打开package.json文件");
+        return false;
+    }
+
+    std::string content_utf8((std::istreambuf_iterator<char>(inFile)), std::istreambuf_iterator<char>());
+    inFile.close();
+
+    // 转换为宽字符便于处理
+    std::wstring content = Utf8ToWide(content_utf8);
+
+    // 创建备份
+    std::wstring backupPath = PACKAGE_JSON_PATH + L".bak";
+    std::ofstream backupFile(backupPath, std::ios::binary);
+    if (!backupFile)
+    {
+        printWarning(L"无法创建备份文件，将继续不创建备份");
+    }
+    else
+    {
+        backupFile << content_utf8;
+        backupFile.close();
+        printInfo(L"已创建package.json备份");
+    }
+
+    // 替换目标字符串
+    const std::wstring oldPath = L"./application.asar/app_launcher/index.js";
+    const std::wstring newPath = L"./napcat/napcat.mjs";
+
+    // 查找并替换
+    size_t pos = content.find(oldPath);
+    if (pos != std::wstring::npos)
+    {
+        content.replace(pos, oldPath.length(), newPath);
+
+        // 转换回UTF-8并写回文件
+        std::string modified_utf8 = WideToUtf8(content);
+        std::ofstream outFile(PACKAGE_JSON_PATH, std::ios::binary);
+        if (!outFile)
+        {
+            printError(L"无法写入修改后的package.json文件");
+            return false;
+        }
+
+        outFile << modified_utf8;
+        outFile.close();
+        printSuccess(L"已成功将启动脚本路径替换为 " + newPath);
+        return true;
+    }
+    else
+    {
+        printWarning(L"在package.json中未找到需要替换的路径，可能格式已变更");
+        return false;
+    }
+}
+
+// 检查文件是否存在并有效的辅助函数
+bool isFileExistAndValid(const std::wstring &filePath, size_t minSizeBytes = 1024)
+{
+    std::error_code ec;
+    if (!std::filesystem::exists(filePath, ec))
+    {
+        return false;
+    }
+
+    // 检查文件大小是否大于最小有效大小
+    auto fileSize = std::filesystem::file_size(filePath, ec);
+    if (ec)
+    { // 如果出现错误
+        return false;
+    }
+    return fileSize >= minSizeBytes;
+}
+
+// 带进度显示的文件下载函数
+bool DownloadFile(const std::wstring &url, const std::wstring &filePath)
+{
+    // 转换为ANSI以便WinInet API使用
+    std::string urlAnsi = WideToAnsi(url);
+
+    HINTERNET hInternet = InternetOpenA("DOWNLOADER", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
+    if (!hInternet)
+    {
+        printError(L"InternetOpen 调用失败");
+        return false;
+    }
+
+    HINTERNET hConnect = InternetOpenUrlA(hInternet, urlAnsi.c_str(), NULL, 0, INTERNET_FLAG_RELOAD, 0);
     if (!hConnect)
     {
-        std::cerr << "InternetOpenUrl failed" << std::endl;
+        printError(L"InternetOpenUrl 调用失败");
         InternetCloseHandle(hInternet);
         return false;
     }
 
-    char buffer[4096];
-    DWORD bytesRead;
-    while (InternetReadFile(hConnect, buffer, sizeof(buffer), &bytesRead) && bytesRead != 0)
+    // 获取文件大小
+    DWORD contentLength = 0;
+    DWORD dataSize = sizeof(contentLength);
+    DWORD index = 0;
+    if (!HttpQueryInfo(hConnect, HTTP_QUERY_CONTENT_LENGTH | HTTP_QUERY_FLAG_NUMBER, &contentLength, &dataSize, &index))
     {
-        response.append(buffer, bytesRead);
+        printWarning(L"无法获取文件大小，将只显示已下载量");
+        contentLength = 0; // 如果无法获取大小，设为0
     }
 
-    InternetCloseHandle(hConnect);
-    InternetCloseHandle(hInternet);
-    return true;
-}
-
-bool DownloadFile(const std::string &url, const std::string &filePath)
-{
-    std::string response;
-    if (!HttpGet(url, response))
-    {
-        return false;
-    }
-
+    // 使用宽字符版本的文件操作
     std::ofstream outFile(filePath, std::ios::binary);
     if (!outFile)
     {
-        std::cerr << "Failed to open file for writing" << std::endl;
+        printError(L"无法打开文件进行写入: " + filePath);
+        InternetCloseHandle(hConnect);
+        InternetCloseHandle(hInternet);
         return false;
     }
 
-    outFile.write(response.c_str(), response.size());
-    outFile.close();
-    return true;
-}
+    char buffer[8192];
+    DWORD bytesRead;
+    DWORD totalBytesRead = 0;
+    int progressPercent = 0;
+    int lastProgressPercent = -1;
 
-std::string getNapCatVersionByPackageMirror()
-{
-    std::vector<std::string> napcatVersionPath = {
-        "http://fastly.jsdelivr.net/gh/NapNeko/NapCatQQ@main/package.json",
-        "https://gcore.jsdelivr.net/gh/NapNeko/NapCatQQ@main/package.json",
-        "https://cdn.jsdelivr.net/gh/NapNeko/NapCatQQ@main/package.json"};
-
-    for (const auto &url : napcatVersionPath)
+    while (InternetReadFile(hConnect, buffer, sizeof(buffer), &bytesRead) && bytesRead != 0)
     {
-        std::string response = "";
-        if (HttpGet(url, response))
+        outFile.write(buffer, bytesRead);
+        totalBytesRead += bytesRead;
+
+        // 显示进度
+        if (contentLength > 0)
         {
-            // 处理响应数据
-            // std::cout << "Response from " << url << ": " << response << std::endl;
-            return response;
+            progressPercent = static_cast<int>((static_cast<double>(totalBytesRead) / contentLength) * 100);
+            if (progressPercent != lastProgressPercent)
+            {
+                setConsoleColor(COLOR_INFO);
+                std::wcout << L"\r下载进度: [";
+
+                // 进度条
+                int barWidth = 30;
+                int pos = barWidth * progressPercent / 100;
+                for (int i = 0; i < barWidth; ++i)
+                {
+                    if (i < pos)
+                        std::wcout << L"=";
+                    else if (i == pos)
+                        std::wcout << L">";
+                    else
+                        std::wcout << L" ";
+                }
+
+                std::wcout << L"] " << progressPercent << L"% ("
+                           << (totalBytesRead / 1024 / 1024) << L"MB/"
+                           << (contentLength / 1024 / 1024) << L"MB)" << std::flush;
+                lastProgressPercent = progressPercent;
+            }
+        }
+        else
+        {
+            // 如果无法获取文件大小，只显示已下载大小
+            if (totalBytesRead % (1024 * 1024) == 0)
+            {
+                setConsoleColor(COLOR_INFO);
+                std::wcout << L"\r已下载: " << (totalBytesRead / 1024 / 1024) << L" MB" << std::flush;
+            }
         }
     }
 
-    return "";
+    setConsoleColor(COLOR_NORMAL);
+    std::wcout << std::endl; // 换行
+    outFile.close();
+    InternetCloseHandle(hConnect);
+    InternetCloseHandle(hInternet);
+
+    // 验证下载的文件是否存在且有效
+    if (!isFileExistAndValid(filePath, 1024))
+    {
+        printError(L"下载的文件检验失败，可能已损坏");
+        return false;
+    }
+
+    return true;
 }
 
-std::string getNapCatVersionByPackage()
+// 执行系统命令并返回错误码
+int runSystemCommand(const std::wstring &command, bool showOutput = true)
 {
-    std::string res = getNapCatVersionByPackageMirror();
-    if (res.empty())
+    printInfo(L"执行命令: " + command);
+
+    // 转换为ANSI以使用system函数
+    std::string commandAnsi = WideToAnsi(command);
+
+    if (showOutput)
     {
-        return "";
+        // 直接执行命令，显示输出
+        return system(commandAnsi.c_str());
     }
-    return getMidText(res, "\"version\": \"", "\"");
+    else
+    {
+        // 将输出重定向到NUL，隐藏输出
+        std::string redirectedCommand = commandAnsi + " > NUL 2>&1";
+        return system(redirectedCommand.c_str());
+    }
 }
 
-std::tuple<bool, std::string> getQQInstalled()
+// 创建目录（如果不存在）
+bool createDirectoryIfNotExists(const std::wstring &dirPath)
 {
-    // 读取注册表 HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\QQ
-    LONG QQUnInstallTableResult;
-    LONG QQUnInstallResult;
-    HKEY QQUnInstallData;
-    std::string QQPath;
-    char szUninstallString[1024]; // 缓存区1024
-    DWORD dwSize = sizeof(szUninstallString);
-    QQUnInstallTableResult = RegOpenKeyEx(HKEY_LOCAL_MACHINE, "SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\QQ", 0, KEY_READ, &QQUnInstallData);
-    if (QQUnInstallTableResult != ERROR_SUCCESS)
+    if (!std::filesystem::exists(dirPath))
     {
-        return std::make_tuple(false, "");
+        std::error_code ec;
+        if (!std::filesystem::create_directories(dirPath, ec))
+        {
+            printError(L"无法创建目录: " + dirPath + L" - " + AnsiToWide(ec.message()));
+            return false;
+        }
+        printInfo(L"创建目录: " + dirPath);
     }
-    QQUnInstallResult = RegQueryValueEx(QQUnInstallData, "UninstallString", NULL, NULL, (LPBYTE)szUninstallString, &dwSize);
-    if (QQUnInstallResult != ERROR_SUCCESS)
-    {
-        return std::make_tuple(false, "");
-    }
-    QQPath = szUninstallString;
-    QQPath = QQPath.substr(0, QQPath.find_last_of("\\")); // 截取路径
-    return std::make_tuple(true, QQPath);
+    return true;
 }
 
-std::string getNapCatVersion()
+bool copyFilesFromDirectory(const std::wstring &sourceDir, const std::wstring &destDir)
 {
-    std::string response = "";
-    // 开始请求HTTP http://nclatest.znin.net/ 解析Json
-    if (HttpGet("http://nclatest.znin.net/", response))
-    {
-        // "html_url": "https://github.com/NapNeko/NapCatQQ/releases/tag/v2.3.5",
-        //获取v2.3.5这种值
-        return getMidText(response,"https://github.com/NapNeko/NapCatQQ/releases/tag/", "\"");
-    }
-    return "";
-}
+    printInfo(L"正在从 " + sourceDir + L" 复制文件到 " + destDir + L"...");
 
-int getQQVersionByPackage(std::string QQPath)
-{
-    // 组装目录 .\resources\app\package.json
-    std::string QQVersionPath = QQPath + "\\resources\\app\\package.json";
-    // 判断文件是否存在
-    std::ifstream QQVersionFile(QQVersionPath);
-    if (!QQVersionFile)
+    // 检查源目录是否存在
+    if (!std::filesystem::exists(sourceDir) || !std::filesystem::is_directory(sourceDir))
     {
-        return 0;
+        printError(L"源目录不存在: " + sourceDir);
+        return false;
     }
-    std::string packageData = "";
-    std::string line;
-    while (std::getline(QQVersionFile, line))
-    {
-        packageData += line;
-    }
-    QQVersionFile.close();
-    return std::stoi(getMidText(packageData, "\"buildVersion\":", ","));
-}
 
-int getQQVersionByConfig(std::string QQPath)
-{
-    // 组装目录 .\config\config.json
-    std::string QQVersionPath = QQPath + "\\versions\\config.json";
-    // 判断文件是否存在
-    std::ifstream QQVersionFile(QQVersionPath);
-    if (!QQVersionFile)
+    // 确保目标目录存在
+    if (!createDirectoryIfNotExists(destDir))
     {
-        return 0;
+        printError(L"无法创建目标目录: " + destDir);
+        return false;
     }
-    std::string packageData = "";
-    std::string line;
-    while (std::getline(QQVersionFile, line))
+
+    bool success = true;
+    std::error_code ec;
+
+    try
     {
-        packageData += line;
+        // 遍历源目录中的所有文件和子目录
+        for (const auto &entry : std::filesystem::recursive_directory_iterator(sourceDir))
+        {
+            // 计算源路径相对于sourceDir的相对路径
+            std::filesystem::path relPath = std::filesystem::relative(entry.path(), sourceDir);
+            // 构建目标路径
+            std::filesystem::path destPath = std::filesystem::path(destDir) / relPath;
+
+            if (entry.is_directory())
+            {
+                // 如果是目录，确保在目标位置创建目录
+                std::filesystem::create_directories(destPath, ec);
+                if (ec)
+                {
+                    printWarning(L"无法创建目录: " + destPath.wstring() + L" - " + AnsiToWide(ec.message()));
+                    success = false;
+                    ec.clear();
+                }
+            }
+            else if (entry.is_regular_file())
+            {
+                // 如果是文件，复制到目标位置
+                // 确保目标目录存在
+                std::filesystem::create_directories(destPath.parent_path(), ec);
+                if (ec)
+                {
+                    ec.clear();
+                }
+
+                // 复制文件
+                std::filesystem::copy_file(
+                    entry.path(),
+                    destPath,
+                    std::filesystem::copy_options::overwrite_existing,
+                    ec);
+
+                if (ec)
+                {
+                    printWarning(L"复制文件失败: " + entry.path().wstring() + L" 到 " + destPath.wstring() + L" - " + AnsiToWide(ec.message()));
+                    success = false;
+                    ec.clear();
+                }
+                else
+                {
+                    printInfo(L"已复制: " + relPath.wstring());
+                }
+            }
+        }
     }
-    QQVersionFile.close();
-    return std::stoi(getMidText(packageData, "\"buildId\": \"", "\""));
+    catch (const std::filesystem::filesystem_error &e)
+    {
+        printError(L"复制过程中发生错误: " + AnsiToWide(e.what()));
+        success = false;
+    }
+
+    if (success)
+    {
+        printSuccess(L"文件复制完成");
+    }
+    else
+    {
+        printWarning(L"部分文件复制失败");
+    }
+
+    return success;
 }
 
 int main()
 {
-    bool isQQInstalled;
-    std::string QQPath;
-    std::tie(isQQInstalled, QQPath) = getQQInstalled();
-    int targetQQVersion = 34231;
-    system("chcp 65001");
-    std::cout << "检测QQ是否安装" << std::endl;
-    if (isQQInstalled)
-    {
-        std::cout << "QQ已安装,安装路径为:" << QQPath << std::endl;
+    // 设置控制台编码为 UTF-8
+    SetConsoleOutputCP(65001);
+    SetConsoleCP(65001);
+
+    // 配置std::wcout使用UTF-16输出
+    std::locale::global(std::locale(""));
+    std::wcout.imbue(std::locale());
+
+    std::wcout << std::endl;
+    setConsoleColor(COLOR_SUCCESS);
+    std::wcout << L"===== NapCat 安装程序 =====" << std::endl;
+    setConsoleColor(COLOR_NORMAL);
+    std::wcout << std::endl;
+
+    // 检查QQ安装包
+    printInfo(L"检查QQ安装包...");
+    if (isFileExistAndValid(QQ_EXE_PATH, 1024 * 1024))
+    { // 至少1MB才认为有效
+        printSuccess(L"QQ安装包已存在，跳过下载步骤");
     }
     else
     {
-        std::cout << "QQ未安装,开始下载QQ..." << std::endl;
-        ShellExecute(NULL, "open", QQDonwload.c_str(), NULL, NULL, SW_SHOWNORMAL);
+        printInfo(L"开始下载QQ...");
+        if (!DownloadFile(QQ_DOWNLOAD_URL, QQ_EXE_PATH))
+        {
+            printError(L"下载QQ失败");
+            system("pause");
+            return -1;
+        }
+        printSuccess(L"QQ下载成功");
+    }
+
+    printInfo(L"开始解压QQ安装包...");
+    // 调用7z解压QQ.exe
+    int extractResult = runSystemCommand(L".\\7z.exe -o" + QQ_EXTRACT_DIR + L" x \"" + QQ_EXE_PATH + L"\" -y");
+    if (extractResult != 0)
+    {
+        printError(L"解压QQ失败，错误码: " + std::to_wstring(extractResult));
         system("pause");
         return -1;
     }
-    int tempBuildId = getQQVersionByConfig(QQPath);
-    if (tempBuildId == 0)
+    printSuccess(L"QQ解压成功");
+
+    // 移动Files目录下的文件到上级目录
+    printInfo(L"正在整理解压后的文件...");
+    std::wstring filesDir = QQ_EXTRACT_DIR + L"\\Files";
+    std::wstring qqExePath = filesDir + L"\\QQ.exe";
+    std::wstring msvcDllPath = filesDir + L"\\msvcp140.dll";
+    std::wstring versionsDir = filesDir + L"\\versions";
+
+    // 检查Files目录是否存在
+    if (std::filesystem::exists(filesDir) && std::filesystem::is_directory(filesDir))
     {
-        tempBuildId = getQQVersionByPackage(QQPath);
-    }
-    if (tempBuildId == 0)
-    {
-        std::cout << "获取QQ版本失败" << std::endl;
-        system("pause");
-        return -1;
-    }
-    std::cout << "QQ版本:" << tempBuildId << std::endl;
-    if (tempBuildId >= targetQQVersion)
-    {
-        std::cout << "QQ版本正确" << std::endl;
+        bool moveSuccess = true;
+
+        // 移动msvcp140.dll到上级目录
+        if (std::filesystem::exists(msvcDllPath))
+        {
+            try
+            {
+                std::filesystem::rename(msvcDllPath, QQ_EXTRACT_DIR + L"\\msvcp140.dll");
+                printInfo(L"已移动msvcp140.dll到上级目录");
+            }
+            catch (const std::filesystem::filesystem_error &e)
+            {
+                printError(L"移动msvcp140.dll失败: " + AnsiToWide(e.what()));
+                moveSuccess = false;
+            }
+        }
+        else
+        {
+            printWarning(L"未找到msvcp140.dll文件");
+            moveSuccess = false;
+        }
+
+        // 移动QQ.exe到上级目录
+        if (std::filesystem::exists(qqExePath))
+        {
+            try
+            {
+                std::filesystem::rename(qqExePath, QQ_EXTRACT_DIR + L"\\QQ.exe");
+                printInfo(L"已移动QQ.exe到上级目录");
+            }
+            catch (const std::filesystem::filesystem_error &e)
+            {
+                printError(L"移动QQ.exe失败: " + AnsiToWide(e.what()));
+                moveSuccess = false;
+            }
+        }
+        else
+        {
+            printWarning(L"未找到QQ.exe文件");
+            moveSuccess = false;
+        }
+
+        // 移动versions目录到上级目录
+        if (std::filesystem::exists(versionsDir) && std::filesystem::is_directory(versionsDir))
+        {
+            try
+            {
+                std::filesystem::rename(versionsDir, QQ_EXTRACT_DIR + L"\\versions");
+                printInfo(L"已移动versions目录到上级目录");
+            }
+            catch (const std::filesystem::filesystem_error &e)
+            {
+                printError(L"移动versions目录失败: " + AnsiToWide(e.what()));
+                moveSuccess = false;
+            }
+        }
+        else
+        {
+            printWarning(L"未找到versions目录");
+            moveSuccess = false;
+        }
+
+        // 删除Files目录
+        if (moveSuccess)
+        {
+            try
+            {
+                std::filesystem::remove_all(filesDir);
+                printSuccess(L"已成功整理解压后的文件");
+            }
+            catch (const std::filesystem::filesystem_error &e)
+            {
+                printWarning(L"删除Files目录失败: " + AnsiToWide(e.what()));
+            }
+        }
     }
     else
     {
-        std::cout << "QQ版本错误,开始下载QQ..." << std::endl;
-        ShellExecute(NULL, "open", QQDonwload.c_str(), NULL, NULL, SW_SHOWNORMAL);
+        printWarning(L"未找到Files目录，跳过文件整理");
+    }
+
+    // 检查NapCat压缩包是否存在
+    printInfo(L"检查NapCat压缩包...");
+    bool isNapCatExist = isFileExistAndValid(NAPCAT_ZIP_PATH, 10 * 1024); // 至少10KB才认为有效
+
+    if (isNapCatExist)
+    {
+        printSuccess(L"NapCat压缩包已存在，跳过下载步骤");
+    }
+    else
+    {
+        // 使用多个镜像链接尝试下载NapCat
+        printInfo(L"开始下载NapCat...");
+
+        std::vector<std::wstring> mirrorUrls = {
+            L"https://github.moeyy.xyz/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
+            L"https://ghp.ci/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
+            L"https://gh.api.99988866.xyz/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip"};
+
+        bool isDownloaded = false;
+        for (const auto &url : mirrorUrls)
+        {
+            printInfo(L"尝试从镜像下载: " + url);
+            isDownloaded = DownloadFile(url, NAPCAT_ZIP_PATH);
+            if (isDownloaded)
+            {
+                break;
+            }
+            else
+            {
+                printWarning(L"该镜像下载失败，尝试下一个...");
+            }
+        }
+
+        if (!isDownloaded)
+        {
+            printError(L"下载NapCat失败，所有镜像均不可用");
+            system("pause");
+            return -1;
+        }
+
+        printSuccess(L"NapCat下载成功");
+    }
+
+    // 创建解压目录
+    if (!createDirectoryIfNotExists(NAPCAT_EXTRACT_DIR))
+    {
+        printError(L"无法创建NapCat解压目录");
         system("pause");
         return -1;
     }
-    std::string NcVersion = getNapCatVersion();
-    if (NcVersion == "")
+
+    printInfo(L"开始解压NapCat...");
+    // 调用powershell的 Expand-Archive 解压
+    int unzipResult = runSystemCommand(L".\\7z.exe -o" + NAPCAT_EXTRACT_DIR + L" x \"" + NAPCAT_ZIP_PATH + L"\" -y");
+
+    if (unzipResult != 0)
     {
-        std::cout << "获取NapCat最新版本失败,尝试备用地址" << std::endl;
-        NcVersion = "v" + getNapCatVersionByPackage();
-    }
-    if (NcVersion == "")
-    {
-        std::cout << "获取NapCat最新版本失败" << std::endl;
+        printError(L"解压NapCat失败，错误码: " + std::to_wstring(unzipResult));
         system("pause");
         return -1;
     }
-    std::cout << "NapCat最新版本:" << NcVersion << std::endl;
-    std::string napcatDownloadUrl = "/https://github.com/NapNeko/NapCatQQ/releases/download/" + NcVersion + "/NapCat.Shell.zip";
-    // 下载文件
-    auto isDownloaded = DownloadFile("http://github.moeyy.xyz" + napcatDownloadUrl, "NapCat.Shell.zip");
-    std::cout << "下载地址: " << "http://github.moeyy.xyz" << napcatDownloadUrl << std::endl;
-    if (!isDownloaded)
+
+    // 检查解压后是否成功
+    if (!std::filesystem::exists(NAPCAT_EXTRACT_DIR) ||
+        !std::filesystem::is_directory(NAPCAT_EXTRACT_DIR))
     {
-        std::cout << "下载NapCat失败" << std::endl;
+        printError(L"解压后的目录不存在，可能解压失败");
         system("pause");
         return -1;
     }
-    // 调用powershell的 Expand-Archive -Path "./NapCat.Shell.zip" -DestinationPath "./NapCatQQ/" -Force 解压
-    system("powershell Expand-Archive -Path \"./NapCat.Shell.zip\" -DestinationPath \"./NapCatQQ/\" -Force");
-    system("cls");
-    std::cout << "欢迎使用哦~~ 双击启动在启动本程序NapCatQQ目录下 launcher.bat 或者 launcher-win10.bat 即可" << std::endl;
+
+    // 检查启动文件是否存在
+    bool hasLauncher = std::filesystem::exists(NAPCAT_EXTRACT_DIR + L"/launcher.bat");
+    bool hasLauncherWin10 = std::filesystem::exists(NAPCAT_EXTRACT_DIR + L"/launcher-win10.bat");
+
+    if (!hasLauncher && !hasLauncherWin10)
+    {
+        printWarning(L"未找到启动脚本，解压可能不完整");
+    }
+    else
+    {
+        printSuccess(L"NapCat解压成功");
+    }
+
+    printInfo(L"正在进行最后的配置...");
+
+    if (!modifyPackageJson())
+    {
+        printWarning(L"修改package.json失败，可能需要手动修改");
+    }
+    std::wstring bootmainDir = L"./bootmain";
+    if (!copyFilesFromDirectory(bootmainDir, QQ_EXTRACT_DIR))
+    {
+        printWarning(L"从bootmain目录复制文件时遇到问题，请检查文件是否完整");
+    }
+    std::wcout << std::endl;
+    setConsoleColor(COLOR_SUCCESS);
+    std::wcout << L"===== 安装完成 =====" << std::endl;
+    std::wcout << L"欢迎使用哦~~ 双击启动即可" << std::endl;
+    setConsoleColor(COLOR_NORMAL);
+
     system("pause");
     return 0;
 }
