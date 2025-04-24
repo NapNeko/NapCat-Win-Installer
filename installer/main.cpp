@@ -18,10 +18,11 @@ constexpr int COLOR_NORMAL = 7;   // 白色
 
 const std::wstring QQ_DOWNLOAD_URL = L"https://dldir1.qq.com/qqfile/qq/QQNT/0cf58861/QQ9.9.19.34606_x64.exe";
 const std::wstring QQ_EXE_PATH = L"QQ.exe";
-const std::wstring QQ_EXTRACT_DIR = L"NapCat.34606.Shell";
-const std::wstring NAPCAT_ZIP_PATH = L"NapCat.Shell.zip";
-const std::wstring NAPCAT_EXTRACT_DIR = L"NapCat.34606.Shell\\versions\\9.9.19-34606\\resources\\app\\napcat";
-const std::wstring PACKAGE_JSON_PATH = L"NapCat.34606.Shell\\versions\\9.9.19-34606\\resources\\app\\package.json";
+const std::wstring QQ_EXTRACT_DIR = L"NapCat.34606.Framework";
+const std::wstring NAPCAT_ZIP_PATH = L"NapCat.Framework.zip";
+const std::wstring NAPCAT_EXTRACT_DIR = L"NapCat.34606.Framework\\versions\\9.9.19-34606\\resources\\app\\LiteLoader\\plugins\\NapCat";
+const std::wstring LiteLoader_DIR = L"NapCat.34606.Framework\\versions\\9.9.19-34606\\resources\\app\\LiteLoader";
+const std::wstring PACKAGE_JSON_PATH = L"NapCat.34606.Framework\\versions\\9.9.19-34606\\resources\\app\\package.json";
 
 // 编码转换函数：将 UTF-16 (wstring) 转换为 ANSI (string)
 std::string WideToAnsi(const std::wstring &wstr)
@@ -152,7 +153,7 @@ bool modifyPackageJson()
 
     // 替换目标字符串
     const std::wstring oldPath = L"./application.asar/app_launcher/index.js";
-    const std::wstring newPath = L"./napcat/napcat.mjs";
+    const std::wstring newPath = L"./LiteLoader";
 
     // 查找并替换
     size_t pos = content.find(oldPath);
@@ -343,7 +344,7 @@ bool createDirectoryIfNotExists(const std::wstring &dirPath)
     return true;
 }
 
-bool copyFilesFromDirectory(const std::wstring &sourceDir, const std::wstring &destDir)
+bool copyFilesFromDirectory(const std::wstring &sourceDir, const std::wstring &destDir, bool showOutput = true)
 {
     printInfo(L"正在从 " + sourceDir + L" 复制文件到 " + destDir + L"...");
 
@@ -410,7 +411,10 @@ bool copyFilesFromDirectory(const std::wstring &sourceDir, const std::wstring &d
                 }
                 else
                 {
-                    printInfo(L"已复制: " + relPath.wstring());
+                    if (showOutput)
+                    {
+                        printInfo(L"已复制: " + relPath.wstring());
+                    }
                 }
             }
         }
@@ -477,82 +481,19 @@ int main()
         return -1;
     }
     printSuccess(L"QQ解压成功");
-
     // 移动Files目录下的文件到上级目录
     printInfo(L"正在整理解压后的文件...");
     std::wstring filesDir = QQ_EXTRACT_DIR + L"\\Files";
-    std::wstring qqExePath = filesDir + L"\\QQ.exe";
-    std::wstring msvcDllPath = filesDir + L"\\msvcp140.dll";
-    std::wstring versionsDir = filesDir + L"\\versions";
 
     // 检查Files目录是否存在
     if (std::filesystem::exists(filesDir) && std::filesystem::is_directory(filesDir))
     {
-        bool moveSuccess = true;
+        // 使用copyFilesFromDirectory复制Files目录下的所有文件和文件夹到上级目录
+        bool moveSuccess = copyFilesFromDirectory(filesDir, QQ_EXTRACT_DIR, false);
 
-        // 移动msvcp140.dll到上级目录
-        if (std::filesystem::exists(msvcDllPath))
-        {
-            try
-            {
-                std::filesystem::rename(msvcDllPath, QQ_EXTRACT_DIR + L"\\msvcp140.dll");
-                printInfo(L"已移动msvcp140.dll到上级目录");
-            }
-            catch (const std::filesystem::filesystem_error &e)
-            {
-                printError(L"移动msvcp140.dll失败: " + AnsiToWide(e.what()));
-                moveSuccess = false;
-            }
-        }
-        else
-        {
-            printWarning(L"未找到msvcp140.dll文件");
-            moveSuccess = false;
-        }
-
-        // 移动QQ.exe到上级目录
-        if (std::filesystem::exists(qqExePath))
-        {
-            try
-            {
-                std::filesystem::rename(qqExePath, QQ_EXTRACT_DIR + L"\\QQ.exe");
-                printInfo(L"已移动QQ.exe到上级目录");
-            }
-            catch (const std::filesystem::filesystem_error &e)
-            {
-                printError(L"移动QQ.exe失败: " + AnsiToWide(e.what()));
-                moveSuccess = false;
-            }
-        }
-        else
-        {
-            printWarning(L"未找到QQ.exe文件");
-            moveSuccess = false;
-        }
-
-        // 移动versions目录到上级目录
-        if (std::filesystem::exists(versionsDir) && std::filesystem::is_directory(versionsDir))
-        {
-            try
-            {
-                std::filesystem::rename(versionsDir, QQ_EXTRACT_DIR + L"\\versions");
-                printInfo(L"已移动versions目录到上级目录");
-            }
-            catch (const std::filesystem::filesystem_error &e)
-            {
-                printError(L"移动versions目录失败: " + AnsiToWide(e.what()));
-                moveSuccess = false;
-            }
-        }
-        else
-        {
-            printWarning(L"未找到versions目录");
-            moveSuccess = false;
-        }
-
-        // 删除Files目录
         if (moveSuccess)
         {
+            // 复制成功后删除Files目录
             try
             {
                 std::filesystem::remove_all(filesDir);
@@ -562,6 +503,10 @@ int main()
             {
                 printWarning(L"删除Files目录失败: " + AnsiToWide(e.what()));
             }
+        }
+        else
+        {
+            printError(L"移动Files目录下的文件失败");
         }
     }
     else
@@ -583,9 +528,11 @@ int main()
         printInfo(L"开始下载NapCat...");
 
         std::vector<std::wstring> mirrorUrls = {
-            L"https://github.moeyy.xyz/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
-            L"https://ghp.ci/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
-            L"https://gh.api.99988866.xyz/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip"};
+            L"https://github.moeyy.xyz/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Framework.zip",
+            L"https://ghp.ci/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Framework.zip",
+            L"https://gh.api.99988866.xyz/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Framework.zip",
+            L"https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Framework.zip",
+        };
 
         bool isDownloaded = false;
         for (const auto &url : mirrorUrls)
@@ -610,6 +557,12 @@ int main()
         }
 
         printSuccess(L"NapCat下载成功");
+    }
+
+    std::wstring LiteloaderSourceDir = L"./LiteLoader";
+    if (!copyFilesFromDirectory(LiteloaderSourceDir, LiteLoader_DIR))
+    {
+        printWarning(L"从LiteLoader目录复制文件时遇到问题，请检查文件是否完整");
     }
 
     // 创建解压目录
@@ -640,18 +593,7 @@ int main()
         return -1;
     }
 
-    // 检查启动文件是否存在
-    bool hasLauncher = std::filesystem::exists(NAPCAT_EXTRACT_DIR + L"/launcher.bat");
-    bool hasLauncherWin10 = std::filesystem::exists(NAPCAT_EXTRACT_DIR + L"/launcher-win10.bat");
-
-    if (!hasLauncher && !hasLauncherWin10)
-    {
-        printWarning(L"未找到启动脚本，解压可能不完整");
-    }
-    else
-    {
-        printSuccess(L"NapCat解压成功");
-    }
+    printSuccess(L"NapCat解压成功");
 
     printInfo(L"正在进行最后的配置...");
 
