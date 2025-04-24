@@ -585,7 +585,9 @@ int main()
         std::vector<std::wstring> mirrorUrls = {
             L"https://github.moeyy.xyz/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
             L"https://ghp.ci/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
-            L"https://gh.api.99988866.xyz/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip"};
+            L"https://gh.api.99988866.xyz/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
+            L"https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Framework.zip",
+        };
 
         bool isDownloaded = false;
         for (const auto &url : mirrorUrls)
