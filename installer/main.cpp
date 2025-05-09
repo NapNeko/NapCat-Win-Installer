@@ -583,6 +583,7 @@ int main()
         printInfo(L"开始下载NapCat...");
 
         std::vector<std::wstring> mirrorUrls = {
+            L"https://gh.llkk.cc/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
             L"https://github.moeyy.xyz/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
             L"https://ghp.ci/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
             L"https://gh.api.99988866.xyz/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
