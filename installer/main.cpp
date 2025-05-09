@@ -16,13 +16,13 @@ constexpr int COLOR_ERROR = 12;   // 亮红色
 constexpr int COLOR_WARNING = 14; // 黄色
 constexpr int COLOR_NORMAL = 7;   // 白色
 
-const std::wstring QQ_DOWNLOAD_URL = L"https://dldir1.qq.com/qqfile/qq/QQNT/0cf58861/QQ9.9.19.34606_x64.exe";
+const std::wstring QQ_DOWNLOAD_URL = L"https://dldir1.qq.com/qqfile/qq/QQNT/f31348f2/QQ9.9.19.34740_x64.exe";
 const std::wstring QQ_EXE_PATH = L"QQ.exe";
-const std::wstring QQ_EXTRACT_DIR = L"NapCat.34606.Framework";
+const std::wstring QQ_EXTRACT_DIR = L"NapCat.34740.Framework";
 const std::wstring NAPCAT_ZIP_PATH = L"NapCat.Framework.zip";
-const std::wstring NAPCAT_EXTRACT_DIR = L"NapCat.34606.Framework\\versions\\9.9.19-34606\\resources\\app\\LiteLoader\\plugins\\NapCat";
-const std::wstring LiteLoader_DIR = L"NapCat.34606.Framework\\versions\\9.9.19-34606\\resources\\app\\LiteLoader";
-const std::wstring PACKAGE_JSON_PATH = L"NapCat.34606.Framework\\versions\\9.9.19-34606\\resources\\app\\package.json";
+const std::wstring NAPCAT_EXTRACT_DIR = L"NapCat.34740.Framework\\versions\\9.9.19-34740\\resources\\app\\LiteLoader\\plugins\\NapCat";
+const std::wstring LiteLoader_DIR = L"NapCat.34740.Framework\\versions\\9.9.19-34740\\resources\\app\\LiteLoader";
+const std::wstring PACKAGE_JSON_PATH = L"NapCat.34740.Framework\\versions\\9.9.19-34740\\resources\\app\\package.json";
 
 // 编码转换函数：将 UTF-16 (wstring) 转换为 ANSI (string)
 std::string WideToAnsi(const std::wstring &wstr)
@@ -528,6 +528,7 @@ int main()
         printInfo(L"开始下载NapCat...");
 
         std::vector<std::wstring> mirrorUrls = {
+            L"https://gh.llkk.cc/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Framework.zip",
             L"https://github.moeyy.xyz/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Framework.zip",
             L"https://ghp.ci/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Framework.zip",
             L"https://gh.api.99988866.xyz/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Framework.zip",
