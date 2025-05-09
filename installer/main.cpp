@@ -200,7 +200,7 @@ bool isFileExistAndValid(const std::wstring &filePath, size_t minSizeBytes = 102
     return fileSize >= minSizeBytes;
 }
 
-// 带进度显示的文件下载函数
+// 带进度显示的文件下载函数，支持301/302重定向
 bool DownloadFile(const std::wstring &url, const std::wstring &filePath)
 {
     // 转换为ANSI以便WinInet API使用
@@ -213,7 +213,9 @@ bool DownloadFile(const std::wstring &url, const std::wstring &filePath)
         return false;
     }
 
-    HINTERNET hConnect = InternetOpenUrlA(hInternet, urlAnsi.c_str(), NULL, 0, INTERNET_FLAG_RELOAD, 0);
+    // 添加 INTERNET_FLAG_NO_AUTO_REDIRECT 标志以便我们可以手动处理重定向
+    HINTERNET hConnect = InternetOpenUrlA(hInternet, urlAnsi.c_str(), NULL, 0, 
+        INTERNET_FLAG_RELOAD, 0);
     if (!hConnect)
     {
         printError(L"InternetOpenUrl 调用失败");
@@ -221,10 +223,51 @@ bool DownloadFile(const std::wstring &url, const std::wstring &filePath)
         return false;
     }
 
+    // 检查是否需要重定向
+    DWORD statusCode = 0;
+    DWORD dataSize = sizeof(statusCode);
+    DWORD index = 0;
+    if (HttpQueryInfoA(hConnect, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, 
+                      &statusCode, &dataSize, &index))
+    {
+        // 处理301/302重定向
+        if (statusCode == 301 || statusCode == 302 || statusCode == 307 || statusCode == 308)
+        {
+            printInfo(L"检测到HTTP重定向(" + std::to_wstring(statusCode) + L")");
+            
+            // 获取Location头
+            char locationBuffer[1024] = {0};
+            dataSize = sizeof(locationBuffer);
+            index = 0;
+            if (HttpQueryInfoA(hConnect, HTTP_QUERY_LOCATION, locationBuffer, &dataSize, &index))
+            {
+                // 关闭当前连接
+                InternetCloseHandle(hConnect);
+                
+                std::string newUrlAnsi(locationBuffer);
+                std::wstring newUrl = AnsiToWide(newUrlAnsi);
+                printInfo(L"重定向到: " + newUrl);
+                
+                // 打开新的URL
+                hConnect = InternetOpenUrlA(hInternet, newUrlAnsi.c_str(), NULL, 0, INTERNET_FLAG_RELOAD, 0);
+                if (!hConnect)
+                {
+                    printError(L"重定向后连接失败");
+                    InternetCloseHandle(hInternet);
+                    return false;
+                }
+            }
+            else
+            {
+                printWarning(L"无法获取重定向URL，尝试继续下载");
+            }
+        }
+    }
+
     // 获取文件大小
     DWORD contentLength = 0;
-    DWORD dataSize = sizeof(contentLength);
-    DWORD index = 0;
+    dataSize = sizeof(contentLength);
+    index = 0;
     if (!HttpQueryInfo(hConnect, HTTP_QUERY_CONTENT_LENGTH | HTTP_QUERY_FLAG_NUMBER, &contentLength, &dataSize, &index))
     {
         printWarning(L"无法获取文件大小，将只显示已下载量");
@@ -241,6 +284,7 @@ bool DownloadFile(const std::wstring &url, const std::wstring &filePath)
         return false;
     }
 
+    // 其余下载代码保持不变
     char buffer[8192];
     DWORD bytesRead;
     DWORD totalBytesRead = 0;
