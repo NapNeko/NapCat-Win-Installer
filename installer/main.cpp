@@ -16,13 +16,13 @@ constexpr int COLOR_ERROR = 12;   // 亮红色
 constexpr int COLOR_WARNING = 14; // 黄色
 constexpr int COLOR_NORMAL = 7;   // 白色
 
-const std::wstring QQ_DOWNLOAD_URL = L"https://dldir1.qq.com/qqfile/qq/QQNT/f31348f2/QQ9.9.19.34740_x64.exe";
+const std::wstring QQ_DOWNLOAD_URL = L"https://dldir1.qq.com/qqfile/qq/QQNT/f56b3dec/QQ9.9.19.35469_x64.exe";
 const std::wstring QQ_EXE_PATH = L"QQ.exe";
-const std::wstring QQ_EXTRACT_DIR = L"NapCat.34740.Framework";
+const std::wstring QQ_EXTRACT_DIR = L"NapCat.35469.Framework";
 const std::wstring NAPCAT_ZIP_PATH = L"NapCat.Framework.zip";
-const std::wstring NAPCAT_EXTRACT_DIR = L"NapCat.34740.Framework\\versions\\9.9.19-34740\\resources\\app\\LiteLoader\\plugins\\NapCat";
-const std::wstring LiteLoader_DIR = L"NapCat.34740.Framework\\versions\\9.9.19-34740\\resources\\app\\LiteLoader";
-const std::wstring PACKAGE_JSON_PATH = L"NapCat.34740.Framework\\versions\\9.9.19-34740\\resources\\app\\package.json";
+const std::wstring NAPCAT_EXTRACT_DIR = L"NapCat.35469.Framework\\versions\\9.9.19-35469\\resources\\app\\LiteLoader\\plugins\\NapCat";
+const std::wstring LiteLoader_DIR = L"NapCat.35469.Framework\\versions\\9.9.19-35469\\resources\\app\\LiteLoader";
+const std::wstring PACKAGE_JSON_PATH = L"NapCat.35469.Framework\\versions\\9.9.19-35469\\resources\\app\\package.json";
 
 // 编码转换函数：将 UTF-16 (wstring) 转换为 ANSI (string)
 std::string WideToAnsi(const std::wstring &wstr)
