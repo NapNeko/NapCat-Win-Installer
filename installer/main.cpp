@@ -583,9 +583,14 @@ int main()
         printInfo(L"开始下载NapCat...");
 
         std::vector<std::wstring> mirrorUrls = {
-            L"https://github.moeyy.xyz/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
-            L"https://ghp.ci/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
-            L"https://gh.api.99988866.xyz/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
+            L"https://j.1win.ggff.net/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
+            L"https://git.yylx.win/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
+            L"https://ghfile.geekertao.top/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
+            L"https://gh-proxy.net/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
+            L"https://ghm.078465.xyz/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
+            L"https://gitproxy.127731.xyz/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
+            L"https://jiashu.1win.eu.org/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
+            L"https://github.tbedu.top/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
             L"https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
         };
 
