@@ -204,18 +204,104 @@ bool DownloadFile(const std::wstring &url, const std::wstring &filePath)
 {
     // 转换为ANSI以便WinInet API使用
     std::string urlAnsi = WideToAnsi(url);
+    const int MAX_REDIRECTS = 5; // 最大重定向次数
+    int redirectCount = 0;
 
-    HINTERNET hInternet = InternetOpenA("DOWNLOADER", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
+    // 使用更真实的User-Agent
+    HINTERNET hInternet = InternetOpenA(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", 
+        INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
     if (!hInternet)
     {
         printError(L"InternetOpen 调用失败");
         return false;
     }
 
-    HINTERNET hConnect = InternetOpenUrlA(hInternet, urlAnsi.c_str(), NULL, 0, INTERNET_FLAG_RELOAD, 0);
-    if (!hConnect)
+    HINTERNET hConnect = nullptr;
+    std::string currentUrl = urlAnsi;
+
+    // 处理重定向循环
+    while (redirectCount <= MAX_REDIRECTS)
     {
-        printError(L"InternetOpenUrl 调用失败");
+        // 添加更多标志以避免缓存和处理HTTPS
+        DWORD flags = INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_PRAGMA_NOCACHE;
+        if (currentUrl.find("https://") == 0)
+        {
+            flags |= INTERNET_FLAG_SECURE;
+        }
+
+        hConnect = InternetOpenUrlA(hInternet, currentUrl.c_str(), NULL, 0, flags, 0);
+        if (!hConnect)
+        {
+            DWORD error = GetLastError();
+            printError(L"InternetOpenUrl 调用失败，错误码: " + std::to_wstring(error));
+            InternetCloseHandle(hInternet);
+            return false;
+        }
+
+        // 检查HTTP状态码
+        DWORD statusCode = 0;
+        DWORD statusCodeSize = sizeof(statusCode);
+        DWORD index = 0;
+        
+        if (HttpQueryInfo(hConnect, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &statusCode, &statusCodeSize, &index))
+        {
+            printInfo(L"HTTP状态码: " + std::to_wstring(statusCode));
+            
+            if (statusCode == 301 || statusCode == 302 || statusCode == 303 || statusCode == 307 || statusCode == 308)
+            {
+                // 处理重定向
+                char locationBuffer[2048] = {0};
+                DWORD locationSize = sizeof(locationBuffer) - 1;
+                index = 0;
+                
+                if (HttpQueryInfo(hConnect, HTTP_QUERY_LOCATION, locationBuffer, &locationSize, &index))
+                {
+                    currentUrl = std::string(locationBuffer, locationSize);
+                    printInfo(L"检测到重定向，跳转到: " + AnsiToWide(currentUrl));
+                    
+                    InternetCloseHandle(hConnect);
+                    hConnect = nullptr;
+                    redirectCount++;
+                    continue; // 使用新URL重新连接
+                }
+                else
+                {
+                    printError(L"无法获取重定向位置");
+                    InternetCloseHandle(hConnect);
+                    InternetCloseHandle(hInternet);
+                    return false;
+                }
+            }
+            else if (statusCode >= 200 && statusCode < 300)
+            {
+                // 成功状态码，跳出重定向循环
+                break;
+            }
+            else
+            {
+                printError(L"HTTP错误，状态码: " + std::to_wstring(statusCode));
+                if (statusCode == 403)
+                {
+                    printError(L"服务器拒绝访问，可能是防护机制");
+                }
+                InternetCloseHandle(hConnect);
+                InternetCloseHandle(hInternet);
+                return false;
+            }
+        }
+        else
+        {
+            // 无法获取状态码，可能不是HTTP协议，继续处理
+            printWarning(L"无法获取HTTP状态码，继续尝试下载");
+            break;
+        }
+    }
+
+    if (redirectCount > MAX_REDIRECTS)
+    {
+        printError(L"重定向次数过多，可能存在循环重定向");
+        if (hConnect) InternetCloseHandle(hConnect);
         InternetCloseHandle(hInternet);
         return false;
     }
@@ -224,10 +310,44 @@ bool DownloadFile(const std::wstring &url, const std::wstring &filePath)
     DWORD contentLength = 0;
     DWORD dataSize = sizeof(contentLength);
     DWORD index = 0;
-    if (!HttpQueryInfo(hConnect, HTTP_QUERY_CONTENT_LENGTH | HTTP_QUERY_FLAG_NUMBER, &contentLength, &dataSize, &index))
+    
+    if (HttpQueryInfo(hConnect, HTTP_QUERY_CONTENT_LENGTH | HTTP_QUERY_FLAG_NUMBER, &contentLength, &dataSize, &index))
     {
-        printWarning(L"无法获取文件大小，将只显示已下载量");
-        contentLength = 0; // 如果无法获取大小，设为0
+        if (contentLength > 0)
+        {
+            printInfo(L"文件大小: " + std::to_wstring(contentLength / 1024 / 1024) + L" MB");
+        }
+        else
+        {
+            printWarning(L"服务器返回文件大小为0，将只显示已下载量");
+            contentLength = 0;
+        }
+    }
+    else
+    {
+        // 尝试获取文本格式的Content-Length
+        char lengthBuffer[64] = {0};
+        DWORD lengthBufferSize = sizeof(lengthBuffer) - 1;
+        index = 0;
+        
+        if (HttpQueryInfo(hConnect, HTTP_QUERY_CONTENT_LENGTH, lengthBuffer, &lengthBufferSize, &index))
+        {
+            contentLength = static_cast<DWORD>(std::atoll(lengthBuffer));
+            if (contentLength > 0)
+            {
+                printInfo(L"文件大小: " + std::to_wstring(contentLength / 1024 / 1024) + L" MB");
+            }
+            else
+            {
+                printWarning(L"无法获取有效文件大小，将只显示已下载量");
+                contentLength = 0;
+            }
+        }
+        else
+        {
+            printWarning(L"无法获取文件大小，将只显示已下载量");
+            contentLength = 0;
+        }
     }
 
     // 使用宽字符版本的文件操作
@@ -303,6 +423,7 @@ bool DownloadFile(const std::wstring &url, const std::wstring &filePath)
         return false;
     }
 
+    printSuccess(L"文件下载完成: " + std::to_wstring(totalBytesRead / 1024 / 1024) + L" MB");
     return true;
 }
 
