@@ -22,7 +22,7 @@ const std::wstring QQ_EXTRACT_DIR = L"NapCat.39038.Framework";
 const std::wstring NAPCAT_ZIP_PATH = L"NapCat.Framework.zip";
 const std::wstring NAPCAT_EXTRACT_DIR = L"NapCat.39038.Framework\\versions\\9.9.21-39038\\resources\\app\\LiteLoader\\plugins\\NapCat";
 const std::wstring LiteLoader_DIR = L"NapCat.39038.Framework\\versions\\9.9.21-39038\\resources\\app\\LiteLoader";
-const std::wstring PACKAGE_JSON_PATH = L"NapCat.39038.Framework\\versions\\9.9.19-39038\\resources\\app\\package.json";
+const std::wstring PACKAGE_JSON_PATH = L"NapCat.39038.Framework\\versions\\9.9.21-39038\\resources\\app\\package.json";
 
 // 编码转换函数：将 UTF-16 (wstring) 转换为 ANSI (string)
 std::string WideToAnsi(const std::wstring &wstr)
