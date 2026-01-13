@@ -16,12 +16,12 @@ constexpr int COLOR_ERROR = 12;   // 亮红色
 constexpr int COLOR_WARNING = 14; // 黄色
 constexpr int COLOR_NORMAL = 7;   // 白色
 
-const std::wstring QQ_DOWNLOAD_URL = L"https://dldir1.qq.com/qqfile/qq/QQNT/b52249eb/QQ9.9.23.41785_x64.exe";
+const std::wstring QQ_DOWNLOAD_URL = L"https://dldir1.qq.com/qqfile/qq/QQNT/be71d851/QQ9.9.26.44498_x64.exe";
 const std::wstring QQ_EXE_PATH = L"QQ.exe";
-const std::wstring QQ_EXTRACT_DIR = L"NapCat.41785.Shell";
+const std::wstring QQ_EXTRACT_DIR = L"NapCat.44498.Shell";
 const std::wstring NAPCAT_ZIP_PATH = L"NapCat.Shell.zip";
-const std::wstring NAPCAT_EXTRACT_DIR = L"NapCat.41785.Shell\\versions\\9.9.23-41785\\resources\\app\\napcat";
-const std::wstring PACKAGE_JSON_PATH = L"NapCat.41785.Shell\\versions\\9.9.23-41785\\resources\\app\\package.json";
+const std::wstring NAPCAT_EXTRACT_DIR = L"NapCat.44498.Shell\\versions\\9.9.26-44498\\resources\\app\\napcat";
+const std::wstring PACKAGE_JSON_PATH = L"NapCat.44498.Shell\\versions\\9.9.26-44498\\resources\\app\\package.json";
 
 // 编码转换函数：将 UTF-16 (wstring) 转换为 ANSI (string)
 std::string WideToAnsi(const std::wstring &wstr)
