@@ -4,10 +4,12 @@
 #include <tuple>
 #include <vector>
 #include <wininet.h>
+#include <bcrypt.h>
 #include <fstream>
 #include <filesystem>
 
 #pragma comment(lib, "wininet.lib")
+#pragma comment(lib, "bcrypt.lib")
 
 // 控制台文本颜色常量
 constexpr int COLOR_INFO = 11;    // 浅青色
@@ -16,12 +18,34 @@ constexpr int COLOR_ERROR = 12;   // 亮红色
 constexpr int COLOR_WARNING = 14; // 黄色
 constexpr int COLOR_NORMAL = 7;   // 白色
 
-const std::wstring QQ_DOWNLOAD_URL = L"https://dldir1.qq.com/qqfile/qq/QQNT/be71d851/QQ9.9.26.44498_x64.exe";
+// GitHub 加速代理，按顺序尝试，最后的空串表示直连 GitHub
+// 节点来自 https://github.akams.cn/ ，有的代理拿不到文件时也会返回 200 和一个网页，所以下载后要检查内容
+const std::vector<std::wstring> GITHUB_PROXIES = {
+    L"https://ghfast.top/",
+    L"https://ghproxy.net/",
+    L"https://github.dpik.top/",
+    L"https://ghm.078465.xyz/",
+    L"https://gh.monlor.com/",
+    L"https://ghproxy.imciel.com/",
+    L"https://git.669966.xyz/",
+    L"https://gh.acmsz.top/",
+    L"https://gitproxy.mrhjx.cn/",
+    L"https://gh-proxy.com/",
+    L"https://gh.llkk.cc/",
+    L"",
+};
+
+// QQ 9.9.33-52230。腾讯下架了部分旧版本的下载链接（NapCatQQ #1973），
+// 所以先试官方 CDN，再试 GitHub 上的镜像，下载后都校验 SHA256
+const std::wstring QQ_VERSION = L"9.9.33-52230";
+const std::wstring QQ_OFFICIAL_URL = L"https://qqdl.gtimg.cn/qqfile/QQNT/9.9.33/release/497e2f1f/QQ_9.9.33_260813_x64_01.exe";
+const std::wstring QQ_GITHUB_URL = L"https://github.com/Rodert/qq-versions/releases/download/qq-packages-20260813-1d08f1d4/QQ_9.9.33_260813_x64_01.exe";
+const std::wstring QQ_SHA256 = L"b25c0d3ce9df764074a9118d0ded927e1b2d7ebf60e306112e8df18a040ec492";
 const std::wstring QQ_EXE_PATH = L"QQ.exe";
-const std::wstring QQ_EXTRACT_DIR = L"NapCat.44498.Shell";
+const std::wstring QQ_EXTRACT_DIR = L"NapCat.52230.Shell";
 const std::wstring NAPCAT_ZIP_PATH = L"NapCat.Shell.zip";
-const std::wstring NAPCAT_EXTRACT_DIR = L"NapCat.44498.Shell\\versions\\9.9.26-44498\\resources\\app\\napcat";
-const std::wstring PACKAGE_JSON_PATH = L"NapCat.44498.Shell\\versions\\9.9.26-44498\\resources\\app\\package.json";
+const std::wstring NAPCAT_EXTRACT_DIR = L"NapCat.52230.Shell\\versions\\9.9.33-52230\\resources\\app\\napcat";
+const std::wstring PACKAGE_JSON_PATH = L"NapCat.52230.Shell\\versions\\9.9.33-52230\\resources\\app\\package.json";
 
 // 编码转换函数：将 UTF-16 (wstring) 转换为 ANSI (string)
 std::string WideToAnsi(const std::wstring &wstr)
@@ -197,6 +221,62 @@ bool isFileExistAndValid(const std::wstring &filePath, size_t minSizeBytes = 102
         return false;
     }
     return fileSize >= minSizeBytes;
+}
+
+// zip 文件以 "PK" 开头，用来识别代理返回的网页
+bool isZipFile(const std::wstring &filePath)
+{
+    std::ifstream file(filePath, std::ios::binary);
+    char magic[2] = {0};
+    return file.read(magic, sizeof(magic)) && magic[0] == 'P' && magic[1] == 'K';
+}
+
+// 计算文件的 SHA256（小写十六进制），失败时返回空串
+std::wstring Sha256File(const std::wstring &filePath)
+{
+    std::ifstream file(filePath, std::ios::binary);
+    if (!file)
+    {
+        return L"";
+    }
+
+    BCRYPT_ALG_HANDLE hAlg = nullptr;
+    BCRYPT_HASH_HANDLE hHash = nullptr;
+    if (!BCRYPT_SUCCESS(BCryptOpenAlgorithmProvider(&hAlg, BCRYPT_SHA256_ALGORITHM, nullptr, 0)))
+    {
+        return L"";
+    }
+
+    std::wstring result;
+    if (BCRYPT_SUCCESS(BCryptCreateHash(hAlg, &hHash, nullptr, 0, nullptr, 0, 0)))
+    {
+        std::vector<char> buffer(1024 * 1024);
+        bool ok = true;
+        while (file)
+        {
+            file.read(buffer.data(), buffer.size());
+            std::streamsize n = file.gcount();
+            if (n > 0 && !BCRYPT_SUCCESS(BCryptHashData(hHash, reinterpret_cast<PUCHAR>(buffer.data()), static_cast<ULONG>(n), 0)))
+            {
+                ok = false;
+                break;
+            }
+        }
+
+        UCHAR digest[32];
+        if (ok && BCRYPT_SUCCESS(BCryptFinishHash(hHash, digest, sizeof(digest), 0)))
+        {
+            const wchar_t *hex = L"0123456789abcdef";
+            for (UCHAR b : digest)
+            {
+                result += hex[b >> 4];
+                result += hex[b & 0x0F];
+            }
+        }
+        BCryptDestroyHash(hHash);
+    }
+    BCryptCloseAlgorithmProvider(hAlg, 0);
+    return result;
 }
 
 // 带进度显示的文件下载函数
@@ -570,18 +650,54 @@ int main()
     setConsoleColor(COLOR_NORMAL);
     std::wcout << std::endl;
 
-    // 检查QQ安装包
+    // 检查QQ安装包，已有的安装包也要校验，避免拿旧版本或下载一半的文件去解压
     printInfo(L"检查QQ安装包...");
+    bool isQQReady = false;
     if (isFileExistAndValid(QQ_EXE_PATH, 1024 * 1024))
     { // 至少1MB才认为有效
-        printSuccess(L"QQ安装包已存在，跳过下载步骤");
-    }
-    else
-    {
-        printInfo(L"开始下载QQ...");
-        if (!DownloadFile(QQ_DOWNLOAD_URL, QQ_EXE_PATH))
+        if (Sha256File(QQ_EXE_PATH) == QQ_SHA256)
         {
-            printError(L"下载QQ失败");
+            printSuccess(L"QQ安装包已存在，跳过下载步骤");
+            isQQReady = true;
+        }
+        else
+        {
+            printWarning(L"已有的QQ安装包不是 " + QQ_VERSION + L" 或已损坏，重新下载");
+        }
+    }
+
+    if (!isQQReady)
+    {
+        printInfo(L"开始下载QQ " + QQ_VERSION + L"...");
+
+        std::vector<std::wstring> qqUrls = {QQ_OFFICIAL_URL};
+        for (const auto &proxy : GITHUB_PROXIES)
+        {
+            qqUrls.push_back(proxy + QQ_GITHUB_URL);
+        }
+
+        for (const auto &url : qqUrls)
+        {
+            printInfo(L"尝试从以下地址下载: " + url);
+            if (!DownloadFile(url, QQ_EXE_PATH))
+            {
+                printWarning(L"该地址下载失败，尝试下一个...");
+                continue;
+            }
+            if (Sha256File(QQ_EXE_PATH) != QQ_SHA256)
+            {
+                printWarning(L"安装包SHA256校验不通过，尝试下一个...");
+                continue;
+            }
+            isQQReady = true;
+            break;
+        }
+
+        if (!isQQReady)
+        {
+            printError(L"下载QQ失败，所有地址均不可用");
+            printError(L"可以手动下载下面的安装包，放到本目录并改名为 QQ.exe 后重新运行:");
+            printError(QQ_OFFICIAL_URL);
             system("pause");
             return -1;
         }
@@ -692,7 +808,7 @@ int main()
 
     // 检查NapCat压缩包是否存在
     printInfo(L"检查NapCat压缩包...");
-    bool isNapCatExist = isFileExistAndValid(NAPCAT_ZIP_PATH, 10 * 1024); // 至少10KB才认为有效
+    bool isNapCatExist = isFileExistAndValid(NAPCAT_ZIP_PATH, 10 * 1024) && isZipFile(NAPCAT_ZIP_PATH); // 至少10KB才认为有效
 
     if (isNapCatExist)
     {
@@ -703,23 +819,12 @@ int main()
         // 使用多个镜像链接尝试下载NapCat
         printInfo(L"开始下载NapCat...");
 
-        std::vector<std::wstring> mirrorUrls = {
-            L"https://j.1win.ggff.net/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
-            L"https://git.yylx.win/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
-            L"https://ghfile.geekertao.top/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
-            L"https://gh-proxy.net/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
-            L"https://ghm.078465.xyz/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
-            L"https://gitproxy.127731.xyz/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
-            L"https://jiashu.1win.eu.org/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
-            L"https://github.tbedu.top/https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
-            L"https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip",
-        };
-
         bool isDownloaded = false;
-        for (const auto &url : mirrorUrls)
+        for (const auto &proxy : GITHUB_PROXIES)
         {
+            const std::wstring url = proxy + L"https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip";
             printInfo(L"尝试从镜像下载: " + url);
-            isDownloaded = DownloadFile(url, NAPCAT_ZIP_PATH);
+            isDownloaded = DownloadFile(url, NAPCAT_ZIP_PATH) && isZipFile(NAPCAT_ZIP_PATH);
             if (isDownloaded)
             {
                 break;
